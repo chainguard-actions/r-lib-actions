@@ -248,7 +248,7 @@ runs:
 
       - name: R package cache
         if: inputs.cache == 'true'
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        uses: chainguard-actions/actions-cache@b5b76c7016521bd34554159c882773b3df2e994a
         with:
           path: |
             ${{ env.R_LIBS_USER }}/*
@@ -261,7 +261,7 @@ runs:
       - name: R package cache restore
         id: cache-packages-restore
         if: inputs.cache == 'always'
-        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        uses: chainguard-actions/actions-cache/restore@b5b76c7016521bd34554159c882773b3df2e994a
         with:
           path: |
             ${{ env.R_LIBS_USER }}/*
@@ -384,7 +384,7 @@ runs:
 
       - name: R package cache save
         if: ${{ always() && steps.cache-packages-restore.outputs.cache-hit != 'true' && inputs.cache == 'always' }}
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        uses: chainguard-actions/actions-cache/save@b5b76c7016521bd34554159c882773b3df2e994a
         with:
           path: |
             ${{ env.R_LIBS_USER }}/*
