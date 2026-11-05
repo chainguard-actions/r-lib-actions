@@ -1,0 +1,56 @@
+name: Test custom cache-version
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install R
+        run: |
+          SUDO=""
+          if command -v sudo >/dev/null 2>&1; then SUDO="sudo"; fi
+          if ! command -v Rscript >/dev/null 2>&1; then
+            $SUDO apt-get update
+            DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y --no-install-recommends r-base-core
+          fi
+          SITE="$(Rscript -e 'cat(file.path(R.home("etc"), "Rprofile.site"))')"
+          echo 'options(repos = c(CRAN = "https://cloud.r-project.org"))' | $SUDO tee -a "$SITE"
+          Rscript --version
+      - name: Create minimal renv.lock
+        run: |
+          RVER="$(Rscript -e 'cat(as.character(getRversion()))')"
+          cat > "$GITHUB_WORKSPACE/renv.lock" <<EOF
+          {
+            "R": {
+              "Version": "$RVER",
+              "Repositories": [
+                { "Name": "CRAN", "URL": "https://cloud.r-project.org" }
+              ]
+            },
+            "Packages": {}
+          }
+          EOF
+      - id: action
+        uses: .
+        with:
+          cache-version: "2"
+      - name: Assert step outcome and environment
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          echo "RENV_PATHS_ROOT: $RENV_PATHS_ROOT"
+          if [ "$OUTCOME" != "success" ]; then
+            echo "FAIL: action did not succeed"
+            exit 1
+          fi
+          case "$RENV_PATHS_ROOT" in
+            */renv) ;;
+            *) echo "FAIL: RENV_PATHS_ROOT not set"; exit 1 ;;
+          esac
+          if [ ! -f "$GITHUB_WORKSPACE/renv/activate.R" ]; then
+            echo "FAIL: renv/activate.R not found"
+            exit 1
+          fi
+          echo "PASS"

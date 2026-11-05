@@ -1,0 +1,9 @@
+{
+  "status": "bundled",
+  "entries": [
+    {
+      "path": "lib/setup-pandoc.js",
+      "status": "bundled"
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+name: Test basic usage
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install R
+        run: |
+          SUDO=""
+          if command -v sudo >/dev/null 2>&1; then SUDO="sudo"; fi
+          if ! command -v Rscript >/dev/null 2>&1; then
+            $SUDO apt-get update
+            DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y --no-install-recommends r-base-core
+          fi
+          SITE="$(Rscript -e 'cat(file.path(R.home("etc"), "Rprofile.site"))')"
+          echo 'options(repos = c(CRAN = "https://cloud.r-project.org"))' | $SUDO tee -a "$SITE"
+          Rscript --version
+      - name: Create minimal renv.lock
+        run: |
+          RVER="$(Rscript -e 'cat(as.character(getRversion()))')"
+          cat > "$GITHUB_WORKSPACE/renv.lock" <<EOF
+          {
+            "R": {
+              "Version": "$RVER",
+              "Repositories": [
+                { "Name": "CRAN", "URL": "https://cloud.r-project.org" }
+              ]
+            },
+            "Packages": {}
+          }
+          EOF
+          cat "$GITHUB_WORKSPACE/renv.lock"
+      - id: action
+        uses: .
+      - name: Assert RENV_PATHS_ROOT exported
+        run: |
+          echo "RENV_PATHS_ROOT: $RENV_PATHS_ROOT"
+          case "$RENV_PATHS_ROOT" in
+            */renv) echo "PASS" ;;
+            *) echo "FAIL: RENV_PATHS_ROOT not set to <runner.temp>/renv"; exit 1 ;;
+          esac
+      - name: Assert renv was activated in the project
+        run: |
+          ls -la "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/renv" || true
+          if [ ! -f "$GITHUB_WORKSPACE/renv/activate.R" ]; then
+            echo "FAIL: renv/activate.R not found"
+            exit 1
+          fi
+          if ! grep -q "renv/activate.R" "$GITHUB_WORKSPACE/.Rprofile"; then
+            echo "FAIL: .Rprofile does not source renv/activate.R"
+            exit 1
+          fi
+          echo "PASS"
+      - name: Assert renv package is installed
+        run: |
+          Rscript -e 'if (!requireNamespace("renv", quietly = TRUE)) quit(status = 1); cat("renv", as.character(packageVersion("renv")), "\n")'
+          echo "PASS"

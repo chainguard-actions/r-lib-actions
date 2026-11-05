@@ -1,0 +1,46 @@
+name: Test basic usage
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install R
+        run: |
+          SUDO=""
+          if command -v sudo >/dev/null 2>&1 && [ "$(id -u)" != "0" ]; then SUDO=sudo; fi
+          if ! command -v Rscript >/dev/null 2>&1; then
+            $SUDO apt-get update -y
+            DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y --no-install-recommends r-base-core
+          fi
+          Rscript --version
+      - name: Set up R library and a minimal package
+        run: |
+          mkdir -p "$RUNNER_TEMP/Rlib"
+          echo "R_LIBS_USER=$RUNNER_TEMP/Rlib" >> "$GITHUB_ENV"
+          mkdir -p .github
+          cat > DESCRIPTION <<'EOF'
+          Package: acttestpkg
+          Title: Test Package
+          Version: 0.0.1
+          Authors@R: person("Test", "User", email = "test@example.com", role = c("aut", "cre"))
+          Description: A minimal package used to test setup-r-dependencies.
+          License: MIT
+          Encoding: UTF-8
+          EOF
+          cat DESCRIPTION
+      - id: action
+        uses: .
+      - name: Assert dependencies were resolved and sessioninfo installed
+        run: |
+          if [ ! -f .github/r-depends.rds ]; then
+            echo "FAIL: .github/r-depends.rds not created"
+            exit 1
+          fi
+          ls "$R_LIBS_USER"
+          if ! Rscript -e 'if (!requireNamespace("sessioninfo", quietly = TRUE)) quit(status = 1)'; then
+            echo "FAIL: sessioninfo not installed"
+            exit 1
+          fi
+          echo "PASS"

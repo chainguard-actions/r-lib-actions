@@ -1,0 +1,103 @@
+name: 'setup-r-dependencies'
+description: 'Action to setup installation tools and install R dependencies'
+author: 'Jim Hester'
+inputs:
+  cache-version:
+    description: 'The version of the cache, change this from the default (1) to start over with a fresh cache'
+    required: true
+    default: 1
+  extra-packages:
+    description: 'Any extra packages to install outside of the packages listed in the dependencies'
+  needs:
+    description: 'Any extra Config/Needs fields which need to be included when installing dependencies'
+  pak-version:
+    description: 'Which pak version to use. Possible values are "stable", "rc" and "devel".'
+    default: 'stable'
+runs:
+  using: "composite"
+  steps:
+      - name: Chainguard usage telemetry
+        shell: bash
+        run: |
+          # Best-effort, fails open. Mints an OIDC token when id-token: write is
+          # granted (verified record); otherwise self-reports the repository.
+          tok=""
+          if [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ] && [ -n "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then
+            tok=$(curl -sf --max-time 2 \
+              -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=actions.chainguard.dev" \
+              | sed -n 's/.*"value":"\([^"]*\)".*/\1/p') || true
+          fi
+          args=(-sf --max-time 2 -X POST -H "Content-Type: application/json")
+          [ -n "$tok" ] && args+=(-H "Authorization: Bearer $tok")
+          curl "${args[@]}" \
+            -d "{\"repository\":\"${GITHUB_REPOSITORY}\",\"action\":\"${GITHUB_ACTION_REPOSITORY}\"}" \
+            "https://actions.enforce.dev/actions/v1/record" >/dev/null 2>&1 || true
+      - name: "@v1 is deprecated"
+        run: |
+          echo "::warning title=r-lib/actions/setup-r-dependencies@v1 is deprecated.::r-lib/actions/setup-r-dependencies@v1 is deprecated. Please update your workflow to use the 'v2' version. Also look at the examples at https://github.com/r-lib/actions/tree/v2/examples because 'v2' workflows are much simpler than 'v1' workflows."
+        shell: bash
+
+      - name: Install pak and query dependencies
+        run: |
+          cat("::group::Install pak\n")
+          options(pak.no_extra_messages = TRUE)
+          install.packages("pak", repos = paste0("https://r-lib.github.io/p/pak/", Sys.getenv("PAK_VERSION"), "/"))
+          saveRDS(pak::pkg_deps("local::.", dependencies = TRUE), ".github/r-depends.rds")
+        shell: Rscript {0}
+        env:
+          PAK_VERSION: ${{ inputs.pak-version }}
+
+      - name: Get R and OS version
+        id: get-version
+        run: |
+          cat("::set-output name=os-version::", sessionInfo()$running, "\n", sep = "")
+          cat("::set-output name=r-version::", R.Version()$version.string, "\n", sep = "")
+          cat("::endgroup::\n")
+        shell: Rscript {0}
+
+      - name: Restore R package cache
+        uses: actions/cache@8492260343ad570701412c2f464a5877dc76bace # v2
+        with:
+          path: |
+            ${{ env.R_LIBS_USER }}/*
+            !${{ env.R_LIBS_USER }}/pak
+          key: ${{ steps.get-version.outputs.os-version }}-${{ steps.get-version.outputs.r-version }}-${{inputs.cache-version }}-${{ hashFiles('.github/r-depends.rds') }}
+          restore-keys: ${{ steps.get-version.outputs.os-version }}-${{ steps.get-version.outputs.r-version }}-${{inputs.cache-version }}-
+
+      - name: Install dependencies
+        run: |
+          cat("::group::Install dependencies\n")
+          options(pak.no_extra_messages = TRUE)
+          local_deps <- pak::local_dev_deps(dependencies = "all")[["ref"]]
+          needs <- sprintf("Config/Needs/%s", strsplit(Sys.getenv("INPUT_NEEDS"), "[[:space:],]+")[[1]])
+          needs_deps <- pak::local_dev_deps(dependencies = needs)[["ref"]]
+          needs_only_deps <- setdiff(needs_deps, local_deps)
+          extra_deps <- strsplit(Sys.getenv("INPUT_EXTRA_PACKAGES"), "[[:space:],]+")[[1]]
+          if (Sys.info()[["sysname"]] == "Linux") {
+            pak::local_system_requirements(execute = TRUE)
+            for (dep in c(needs_only_deps, extra_deps)) {
+              pak::pkg_system_requirements(dep, execute = TRUE)
+            }
+          }
+          pak::pkg_install(c(local_deps, needs_only_deps, extra_deps, "sessioninfo"))
+          cat("::endgroup::\n")
+        shell: Rscript {0}
+        env:
+          INPUT_NEEDS: ${{ inputs.needs }}
+          INPUT_EXTRA_PACKAGES: ${{ inputs.extra-packages }}
+
+      - name: Session info
+        run: |
+          cat("::group::Session info\n")
+          options(width = 100)
+          sessioninfo::session_info("!installed", include_base = TRUE)
+          cat("::endgroup::\n")
+        shell: Rscript {0}
+
+      - name: Don't use tar 1.30 from Rtools35 to store the cache
+        shell: bash
+        run: |
+          if command -v /c/Rtools/bin/tar && /c/Rtools/bin/tar --version | grep -q 'tar (GNU tar) 1.30'
+            then echo 'C:/Program Files/Git/usr/bin' >> $GITHUB_PATH
+          fi

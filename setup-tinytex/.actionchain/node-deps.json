@@ -1,0 +1,9 @@
+{
+  "status": "bundled",
+  "entries": [
+    {
+      "path": "lib/setup-tinytex.js",
+      "status": "bundled"
+    }
+  ]
+}

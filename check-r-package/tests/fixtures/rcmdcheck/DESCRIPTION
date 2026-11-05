@@ -1,0 +1,9 @@
+Package: rcmdcheck
+Version: 0.0.0.9000
+Title: Fake rcmdcheck For Testing
+Description: Minimal stand-in for rcmdcheck that records the arguments it
+    receives and simulates check results for testing purposes.
+Author: Test User
+Maintainer: Test User <test@example.com>
+License: MIT
+Encoding: UTF-8

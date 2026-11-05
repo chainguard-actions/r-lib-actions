@@ -1,0 +1,45 @@
+name: Test basic usage without installing R
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        with:
+          r-version: '4.1.2'
+          install-r: 'false'
+      - name: Assert installed-r-version output
+        env:
+          ACTUAL: ${{ steps.action.outputs.installed-r-version }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" != "4.1.2" ]; then
+            echo "FAIL: expected '4.1.2'"
+            exit 1
+          fi
+          echo "PASS"
+      - name: Assert exported environment variables
+        run: |
+          echo "R_LIBS_USER=$R_LIBS_USER TZ=$TZ _R_CHECK_SYSTEM_CLOCK_=$_R_CHECK_SYSTEM_CLOCK_ NOT_CRAN=$NOT_CRAN"
+          case "$R_LIBS_USER" in
+            */Library) ;;
+            *) echo "FAIL: R_LIBS_USER should end with /Library"; exit 1 ;;
+          esac
+          [ "$TZ" = "UTC" ] || { echo "FAIL: TZ"; exit 1; }
+          [ "$_R_CHECK_SYSTEM_CLOCK_" = "FALSE" ] || { echo "FAIL: _R_CHECK_SYSTEM_CLOCK_"; exit 1; }
+          [ "$NOT_CRAN" = "true" ] || { echo "FAIL: NOT_CRAN"; exit 1; }
+          echo "PASS"
+      - name: Assert default .Rprofile contents
+        run: |
+          f="$HOME/.Rprofile"
+          if [ ! -f "$f" ]; then echo "FAIL: $f not found"; exit 1; fi
+          cat "$f"
+          grep -q "RSPM = NULL" "$f" || { echo "FAIL: RSPM should be NULL"; exit 1; }
+          grep -q "CRAN = 'https://cloud.r-project.org'" "$f" || { echo "FAIL: CRAN repo"; exit 1; }
+          grep -q "crayon.enabled =" "$f" || { echo "FAIL: crayon.enabled option line missing"; exit 1; }
+          grep -q "Ncpus = 1" "$f" || { echo "FAIL: Ncpus"; exit 1; }
+          grep -q 'HTTPUserAgent = sprintf("R/%s R (%s) on GitHub Actions"' "$f" || { echo "FAIL: default user agent"; exit 1; }
+          echo "PASS"

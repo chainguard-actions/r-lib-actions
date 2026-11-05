@@ -1,0 +1,38 @@
+name: Test custom R options in .Rprofile
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        with:
+          r-version: '3.6.3'
+          install-r: 'false'
+          Ncpus: '4'
+          crayon.enabled: 'TRUE'
+          http-user-agent: 'my-custom-agent/1.0'
+          extra-repositories: 'https://repo1.example.com https://repo2.example.com'
+      - name: Assert installed-r-version output
+        env:
+          ACTUAL: ${{ steps.action.outputs.installed-r-version }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" != "3.6.3" ]; then
+            echo "FAIL: expected '3.6.3'"
+            exit 1
+          fi
+          echo "PASS"
+      - name: Assert custom .Rprofile contents
+        run: |
+          f="$HOME/.Rprofile"
+          if [ ! -f "$f" ]; then echo "FAIL: $f not found"; exit 1; fi
+          cat "$f"
+          grep -q "Ncpus = 4" "$f" || { echo "FAIL: Ncpus"; exit 1; }
+          grep -q "crayon.enabled =" "$f" || { echo "FAIL: crayon.enabled option line missing"; exit 1; }
+          grep -q 'HTTPUserAgent = "my-custom-agent/1.0"' "$f" || { echo "FAIL: user agent"; exit 1; }
+          grep -q '"https://repo1.example.com","https://repo2.example.com"' "$f" || { echo "FAIL: extra repositories"; exit 1; }
+          grep -q "CRAN = 'https://cloud.r-project.org'," "$f" || { echo "FAIL: CRAN followed by extra repos"; exit 1; }
+          echo "PASS"

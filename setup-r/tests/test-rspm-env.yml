@@ -1,0 +1,29 @@
+name: Test RSPM environment variable is used as repository
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        env:
+          RSPM: https://rspm.example.com/cran/latest
+          CRAN: https://cran.example.org
+        with:
+          r-version: '4.0.5'
+          install-r: 'false'
+      - name: Assert RSPM exported and .Rprofile repos
+        run: |
+          echo "RSPM=$RSPM"
+          if [ "$RSPM" != "https://rspm.example.com/cran/latest" ]; then
+            echo "FAIL: RSPM env not exported"
+            exit 1
+          fi
+          f="$HOME/.Rprofile"
+          if [ ! -f "$f" ]; then echo "FAIL: $f not found"; exit 1; fi
+          cat "$f"
+          grep -q "RSPM = 'https://rspm.example.com/cran/latest'" "$f" || { echo "FAIL: RSPM repo"; exit 1; }
+          grep -q "CRAN = 'https://cran.example.org'" "$f" || { echo "FAIL: CRAN repo from env"; exit 1; }
+          echo "PASS"

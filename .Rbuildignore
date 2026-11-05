@@ -1,0 +1,12 @@
+^pr-fetch$
+^pr-push$
+^run-rchk$
+^setup-r$
+^setup-pandoc$
+^setup-tinytex$
+^examples$
+^LICENSE$
+^.github$
+^actions\.Rproj$
+^\.Rproj\.user$
+^Makefile$

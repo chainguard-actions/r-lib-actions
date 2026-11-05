@@ -1,0 +1,38 @@
+name: Test custom inputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      FAKE_RCMDCHECK_LOG: /tmp/rcmdcheck-log.txt
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install R and fake rcmdcheck
+        run: |
+          SUDO=""; if [ "$(id -u)" != "0" ] && command -v sudo >/dev/null; then SUDO=sudo; fi
+          if ! command -v Rscript >/dev/null; then
+            $SUDO apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq --no-install-recommends r-base-core
+          fi
+          LIB="${RUNNER_TEMP:-/tmp}/Rlib"
+          mkdir -p "$LIB"
+          R CMD INSTALL --library="$LIB" "$GITHUB_WORKSPACE/tests/fixtures/rcmdcheck"
+          echo "R_LIBS=$LIB" >> "$GITHUB_ENV"
+          rm -f /tmp/rcmdcheck-log.txt
+      - id: action
+        uses: .
+        with:
+          args: '"--no-manual", "--no-vignettes", "--ignore-vignettes"'
+          build_args: '"--no-build-vignettes"'
+          error-on: '"error"'
+          check-dir: '"custom-check-out"'
+      - name: Assert rcmdcheck called with custom inputs
+        run: |
+          cat /tmp/rcmdcheck-log.txt || { echo "FAIL: rcmdcheck was not called"; exit 1; }
+          grep -qx 'args=--no-manual,--no-vignettes,--ignore-vignettes' /tmp/rcmdcheck-log.txt || { echo "FAIL: args"; exit 1; }
+          grep -qx 'build_args=--no-build-vignettes' /tmp/rcmdcheck-log.txt || { echo "FAIL: build_args"; exit 1; }
+          grep -qx 'error_on=error' /tmp/rcmdcheck-log.txt || { echo "FAIL: error_on"; exit 1; }
+          grep -qx 'check_dir=custom-check-out' /tmp/rcmdcheck-log.txt || { echo "FAIL: check_dir"; exit 1; }
+          [ -d "$GITHUB_WORKSPACE/custom-check-out" ] || { echo "FAIL: custom check dir not created"; exit 1; }
+          echo "PASS"

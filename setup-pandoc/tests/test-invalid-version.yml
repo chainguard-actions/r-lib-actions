@@ -1,0 +1,35 @@
+name: Test nonexistent pandoc version
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          pandoc-version: '0.0.0'
+      - name: Assert nothing was installed for the bogus version
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          if [ "$OUTCOME" != "success" ] && [ "$OUTCOME" != "failure" ]; then
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi
+          if [ -f "$RUNNER_TEMP/pandoc-0.0.0-1-amd64.deb" ]; then
+            echo "FAIL: a .deb for the bogus version was downloaded"
+            exit 1
+          fi
+          if command -v pandoc >/dev/null 2>&1; then
+            V="$(pandoc --version | head -n1)"
+            echo "pandoc present: $V"
+            if echo "$V" | grep -q "0\.0\.0"; then
+              echo "FAIL: bogus pandoc version installed"
+              exit 1
+            fi
+          fi
+          echo "PASS: bogus version was not installed"

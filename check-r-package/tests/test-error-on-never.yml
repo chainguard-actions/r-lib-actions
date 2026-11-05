@@ -1,0 +1,32 @@
+name: Test error-on never tolerates warnings
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      FAKE_RCMDCHECK_LOG: /tmp/rcmdcheck-log.txt
+      FAKE_RCMDCHECK_RESULT: warning
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install R and fake rcmdcheck
+        run: |
+          SUDO=""; if [ "$(id -u)" != "0" ] && command -v sudo >/dev/null; then SUDO=sudo; fi
+          if ! command -v Rscript >/dev/null; then
+            $SUDO apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq --no-install-recommends r-base-core
+          fi
+          LIB="${RUNNER_TEMP:-/tmp}/Rlib"
+          mkdir -p "$LIB"
+          R CMD INSTALL --library="$LIB" "$GITHUB_WORKSPACE/tests/fixtures/rcmdcheck"
+          echo "R_LIBS=$LIB" >> "$GITHUB_ENV"
+          rm -f /tmp/rcmdcheck-log.txt
+      - id: action
+        uses: .
+        with:
+          error-on: '"never"'
+      - name: Assert rcmdcheck ran with error_on=never
+        run: |
+          cat /tmp/rcmdcheck-log.txt || { echo "FAIL: rcmdcheck was not called"; exit 1; }
+          grep -qx 'error_on=never' /tmp/rcmdcheck-log.txt || { echo "FAIL: error_on"; exit 1; }
+          echo "PASS"

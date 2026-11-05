@@ -1,0 +1,38 @@
+name: Test basic usage with repo token
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Remove any pre-existing pr remote
+        run: git remote remove pr 2>/dev/null || true
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Assert action fetched PR or failed gracefully (no PR context / sentinel repo)
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          git remote -v || true
+          if [ "$OUTCOME" = "success" ]; then
+            if ! git remote | grep -qx pr; then
+              echo "FAIL: action succeeded but 'pr' remote was not added"
+              exit 1
+            fi
+            echo "current branch: $(git rev-parse --abbrev-ref HEAD)"
+            echo "PASS: PR branch fetched and checked out"
+          elif [ "$OUTCOME" = "failure" ]; then
+            if git remote | grep -qx pr; then
+              echo "FAIL: action failed but still added the 'pr' remote"
+              exit 1
+            fi
+            echo "PASS: action failed gracefully (no pull_request context / sentinel repo)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi

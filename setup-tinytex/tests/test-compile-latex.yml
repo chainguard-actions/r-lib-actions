@@ -1,0 +1,36 @@
+name: Test compiling a LaTeX document
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Prepare apt (action runs 'sudo apt-get install texinfo')
+        run: |
+          if ! command -v sudo >/dev/null 2>&1; then
+            apt-get update && apt-get install -y sudo
+          fi
+          sudo apt-get update
+          command -v perl || sudo apt-get install -y perl
+          command -v wget || command -v curl || sudo apt-get install -y wget
+      - id: action
+        uses: .
+      - name: Compile minimal LaTeX document
+        run: |
+          WORK="$(mktemp -d)"
+          cd "$WORK"
+          cat > hello.tex <<'EOF'
+          \documentclass{article}
+          \begin{document}
+          Hello from TinyTeX.
+          \end{document}
+          EOF
+          command -v pdflatex || { echo "FAIL: pdflatex not on PATH"; exit 1; }
+          pdflatex -interaction=nonstopmode hello.tex
+          if [ ! -s hello.pdf ]; then
+            echo "FAIL: hello.pdf was not produced"
+            exit 1
+          fi
+          ls -la hello.pdf
+          echo "PASS"

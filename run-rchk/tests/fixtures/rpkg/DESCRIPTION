@@ -1,0 +1,8 @@
+Package: rchktest
+Title: Minimal Package For rchk Tests
+Version: 0.0.1
+Authors@R: person("Test", "User", email = "test@example.com", role = c("aut", "cre"))
+Description: A minimal package with correct C code used to exercise rchk.
+License: MIT + file LICENSE
+Encoding: UTF-8
+NeedsCompilation: yes

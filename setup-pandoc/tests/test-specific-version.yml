@@ -1,0 +1,29 @@
+name: Test explicit pandoc version
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Refresh apt package lists (needed for gdebi-core install)
+        run: |
+          if command -v sudo >/dev/null 2>&1; then SUDO=sudo; else SUDO=; fi
+          $SUDO apt-get update -y
+      - id: action
+        uses: .
+        with:
+          pandoc-version: '2.11.4'
+      - name: Assert pandoc 2.11.4 installed
+        run: |
+          if ! command -v pandoc >/dev/null 2>&1; then
+            echo "FAIL: pandoc not found on PATH"
+            exit 1
+          fi
+          ACTUAL="$(pandoc --version | head -n1)"
+          echo "actual: $ACTUAL"
+          if ! echo "$ACTUAL" | grep -q "2\.11\.4"; then
+            echo "FAIL: expected pandoc 2.11.4"
+            exit 1
+          fi
+          echo "PASS"
