@@ -1,0 +1,49 @@
+name: Test basic usage
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install R
+        run: |
+          if ! command -v Rscript >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends r-base-core
+          fi
+          RHOME="$(R RHOME)"
+          echo 'options(repos = c(CRAN = "https://cloud.r-project.org"))' | sudo tee -a "$RHOME/etc/Rprofile.site"
+          Rscript -e 'R.version.string'
+      - id: action
+        uses: .
+        with:
+          working-directory: tests/fixtures/renv-basic
+          bypass-cache: "true"
+      - name: Assert renv was activated
+        run: |
+          DIR="$GITHUB_WORKSPACE/tests/fixtures/renv-basic"
+          ls -la "$DIR" "$DIR/renv" || true
+          if [ ! -f "$DIR/renv/activate.R" ]; then
+            echo "FAIL: renv/activate.R not created"
+            exit 1
+          fi
+          if [ ! -f "$DIR/.Rprofile" ]; then
+            echo "FAIL: .Rprofile not created"
+            exit 1
+          fi
+          echo "PASS"
+      - name: Assert RENV_PATHS_ROOT is set
+        env:
+          EXPECTED: ${{ runner.temp }}/renv
+        run: |
+          echo "RENV_PATHS_ROOT: $RENV_PATHS_ROOT"
+          if [ "$RENV_PATHS_ROOT" != "$EXPECTED" ]; then
+            echo "FAIL: expected '$EXPECTED'"
+            exit 1
+          fi
+          echo "PASS"
+      - name: Assert renv package is installed
+        run: |
+          Rscript -e 'if (!requireNamespace("renv", quietly = TRUE)) quit(status = 1)'
+          echo "PASS"

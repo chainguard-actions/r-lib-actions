@@ -1,0 +1,103 @@
+name: 'check-r-package'
+description: 'Action to check R package with rcmdcheck. Assumes that rcmdcheck has already been installed.'
+author: 'Jim Hester'
+inputs:
+  args:
+    description: 'Arguments to pass to the `args` parameter of rcmdcheck. Must be an R expression. Note that it often needs to be quoted in YAML, see the README for details.'
+    default: 'c("--no-manual", "--as-cran")'
+  build_args:
+    description: 'Arguments to pass to the `build_args` parameter of rcmdcheck. Note that it often needs to be quoted in YAML, see the README for details.'
+    default: '"--no-manual"'
+  error-on:
+    description: 'What type of result should cause a build error? Note that it often needs to be quoted in YAML, see the README for details.'
+    default: '"warning"'
+  check-dir:
+    description: 'Where should the check output go? Note that it often needs to be quoted in YAML, see the README for details.'
+    default: '"check"'
+  working-directory:
+    description: 'Using the working-directory keyword, you can specify the working directory of where "rcmdcheck::rcmdcheck" is run.'
+    default: '.'
+  upload-snapshots:
+    description: |
+      Whether to upload all testthat snapshots as an artifact. Possible values are 'true',
+      'false', 'always'.
+    default: 'false'
+  upload-results:
+    description: |
+      Whether to upload check results for successful runs too. If 'never',
+      then it does not upload the results, even on failure.
+    default: 'false'
+  artifact-name:
+    description: |
+      Use this to override the default artifact name for the check results.
+  snapshot-artifact-name:
+    description: |
+      Use this to override the default artifact name for testthat snapshots.
+
+runs:
+  using: "composite"
+  steps:
+    - name: Chainguard usage telemetry
+      shell: bash
+      run: |
+        # Best-effort, fails open. Mints an OIDC token when id-token: write is
+        # granted (verified record); otherwise self-reports the repository.
+        tok=""
+        if [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ] && [ -n "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then
+          tok=$(curl -sf --max-time 2 \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=actions.chainguard.dev" \
+            | sed -n 's/.*"value":"\([^"]*\)".*/\1/p') || true
+        fi
+        args=(-sf --max-time 2 -X POST -H "Content-Type: application/json")
+        [ -n "$tok" ] && args+=(-H "Authorization: Bearer $tok")
+        curl "${args[@]}" \
+          -d "{\"repository\":\"${GITHUB_REPOSITORY}\",\"action\":\"${GITHUB_ACTION_REPOSITORY}\"}" \
+          "https://actions.enforce.dev/actions/v1/record" >/dev/null 2>&1 || true
+    - name: Check
+      id: rcmdcheck
+      run: |
+        ## --------------------------------------------------------------------
+        options(crayon.enabled = TRUE)
+        cat("LOGNAME=", Sys.info()[["user"]], "\n", sep = "", file = Sys.getenv("GITHUB_ENV"), append = TRUE)
+        if (Sys.getenv("_R_CHECK_FORCE_SUGGESTS_", "") == "") Sys.setenv("_R_CHECK_FORCE_SUGGESTS_" = "false")
+        if (Sys.getenv("_R_CHECK_CRAN_INCOMING_", "") == "") Sys.setenv("_R_CHECK_CRAN_INCOMING_" = "false")
+        .input_expr <- function(name) eval(parse(text = paste0("(", Sys.getenv(name), "\n)"))[[1]], envir = globalenv())
+        .check_dir <- .input_expr("INPUT_CHECK_DIR")
+        .check_dir_path <- gsub("[\r\n]", "", file.path(getwd(), .check_dir))
+        cat("check-dir-path=", .check_dir_path, "\n", file = Sys.getenv("GITHUB_OUTPUT"), sep = "", append = TRUE)
+        check_results <- rcmdcheck::rcmdcheck(args = .input_expr("INPUT_ARGS"), build_args = .input_expr("INPUT_BUILD_ARGS"), error_on = .input_expr("INPUT_ERROR_ON"), check_dir = .check_dir)
+      shell: Rscript {0}
+      env:
+        INPUT_CHECK_DIR: ${{ inputs.check-dir }}
+        INPUT_ARGS: ${{ inputs.args }}
+        INPUT_BUILD_ARGS: ${{ inputs.build_args }}
+        INPUT_ERROR_ON: ${{ inputs.error-on }}
+      working-directory: ${{ inputs.working-directory }}
+
+    - name: Show testthat output
+      if: always()
+      run: |
+        ## --------------------------------------------------------------------
+        echo ::group::Show testthat output
+        find "$CHECK_DIR_PATH" -name 'testthat.Rout*' -exec cat '{}' \; || true
+        echo ::endgroup::
+      shell: bash
+      env:
+        CHECK_DIR_PATH: ${{ steps.rcmdcheck.outputs.check-dir-path }}
+      working-directory: ${{ inputs.working-directory }}
+
+    - name: Upload check results
+      if: ${{ (failure() && inputs.upload-results != 'never') || (inputs.upload-results != 'false' && inputs.upload-results != 'never') }}
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ${{ inputs.artifact-name || format('{0}-{1}-r{2}-{3}-results', runner.os, runner.arch, matrix.config.r, matrix.config.id || strategy.job-index ) }}
+        path: ${{ steps.rcmdcheck.outputs.check-dir-path }}
+
+    - name: Upload snapshots
+      if: ${{ (failure() && inputs.upload-snapshots == 'always') || inputs.upload-snapshots != 'false' }}
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ${{ inputs.snapshot-artifact-name || format('{0}-{1}-r{2}-{3}-testthat-snapshots', runner.os, runner.arch, matrix.config.r, matrix.config.id || strategy.job-index ) }}
+        path: ${{ steps.rcmdcheck.outputs.check-dir-path }}/**/tests*/testthat/_snaps
+        if-no-files-found: ignore

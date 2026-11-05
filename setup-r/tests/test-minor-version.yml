@@ -1,0 +1,30 @@
+name: Test minor version resolution
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      SETUP_R_LINUX_PLATFORM: linux-ubuntu-22.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        with:
+          r-version: '4.3.x'
+          install-r: 'false'
+          use-public-rspm: 'false'
+      - name: Assert resolved to latest 4.3 patch release
+        env:
+          ACTUAL: ${{ steps.action.outputs.installed-r-version }}
+        run: |
+          echo "actual: $ACTUAL"
+          if ! echo "$ACTUAL" | grep -qE '^4\.3\.[0-9]+$'; then
+            echo "FAIL: expected 4.3.z"
+            exit 1
+          fi
+          if [ "$ACTUAL" = "4.3.0" ]; then
+            echo "FAIL: expected the last 4.3 patch release, not 4.3.0"
+            exit 1
+          fi
+          echo "PASS"

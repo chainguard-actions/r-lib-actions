@@ -1,0 +1,45 @@
+name: Test basic TinyTeX install
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Prepare apt (action runs sudo apt-get install texinfo)
+        run: |
+          if ! command -v sudo >/dev/null 2>&1; then
+            apt-get update && apt-get install -y sudo
+          fi
+          sudo apt-get update
+          command -v perl || sudo apt-get install -y perl
+          command -v wget || command -v curl || sudo apt-get install -y wget
+      - id: action
+        uses: .
+      - name: Assert TinyTeX binaries are on PATH
+        run: |
+          echo "PATH: $PATH"
+          for bin in tlmgr pdflatex; do
+            if ! command -v "$bin" >/dev/null 2>&1; then
+              echo "FAIL: $bin not found on PATH"
+              exit 1
+            fi
+            echo "found $bin at $(command -v $bin)"
+          done
+          case "$(command -v tlmgr)" in
+            "$HOME/.TinyTeX/bin/"*) echo "tlmgr under ~/.TinyTeX/bin" ;;
+            *) echo "FAIL: tlmgr not under $HOME/.TinyTeX/bin"; exit 1 ;;
+          esac
+          if [ ! -d "$HOME/.TinyTeX/bin" ]; then
+            echo "FAIL: ~/.TinyTeX/bin missing"
+            exit 1
+          fi
+          tlmgr --version
+          echo "PASS"
+      - name: Assert texinfo installed (texi2dvi)
+        run: |
+          if ! command -v texi2dvi >/dev/null 2>&1; then
+            echo "FAIL: texi2dvi not found"
+            exit 1
+          fi
+          echo "PASS"

@@ -1,0 +1,11 @@
+Package: testpkg
+Title: Test Package For setup-r-dependencies
+Version: 0.0.1
+Authors@R: person("Test", "User", email = "test@example.com", role = c("aut", "cre"))
+Description: A minimal package used to test dependency installation.
+License: MIT
+Encoding: UTF-8
+Imports:
+    glue
+Config/Needs/website:
+    praise

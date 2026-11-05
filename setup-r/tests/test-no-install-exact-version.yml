@@ -1,0 +1,51 @@
+name: Test exact version without installing R
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      SETUP_R_LINUX_PLATFORM: linux-ubuntu-22.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        with:
+          r-version: '4.4.2'
+          install-r: 'false'
+          use-public-rspm: 'false'
+          Ncpus: '4'
+      - name: Assert installed-r-version equals 4.4.2
+        env:
+          ACTUAL: ${{ steps.action.outputs.installed-r-version }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" != "4.4.2" ]; then
+            echo "FAIL: expected '4.4.2'"
+            exit 1
+          fi
+          echo "PASS"
+      - name: Assert exported environment variables
+        run: |
+          echo "R_LIBS_USER=$R_LIBS_USER TZ=$TZ NOT_CRAN=$NOT_CRAN CHECK_CLOCK=$_R_CHECK_SYSTEM_CLOCK_"
+          [ "$TZ" = "UTC" ] || { echo "FAIL: TZ"; exit 1; }
+          [ "$NOT_CRAN" = "true" ] || { echo "FAIL: NOT_CRAN"; exit 1; }
+          [ "$_R_CHECK_SYSTEM_CLOCK_" = "FALSE" ] || { echo "FAIL: _R_CHECK_SYSTEM_CLOCK_"; exit 1; }
+          case "$R_LIBS_USER" in
+            */Library) ;;
+            *) echo "FAIL: R_LIBS_USER should end in /Library"; exit 1 ;;
+          esac
+          [ -d "$R_LIBS_USER" ] || { echo "FAIL: R_LIBS_USER dir missing"; exit 1; }
+          if [ -n "$RSPM" ]; then
+            echo "FAIL: RSPM should not be set with use-public-rspm=false, got $RSPM"
+            exit 1
+          fi
+          echo "PASS"
+      - name: Assert .Rprofile content
+        run: |
+          cat "$HOME/.Rprofile"
+          grep -q 'Ncpus = 4' "$HOME/.Rprofile" || { echo "FAIL: Ncpus"; exit 1; }
+          grep -q 'RSPM = NULL' "$HOME/.Rprofile" || { echo "FAIL: RSPM NULL"; exit 1; }
+          grep -q "CRAN = 'https://cran.rstudio.com'" "$HOME/.Rprofile" || { echo "FAIL: default CRAN"; exit 1; }
+          grep -q 'on GitHub Actions' "$HOME/.Rprofile" || { echo "FAIL: default user agent"; exit 1; }
+          echo "PASS"

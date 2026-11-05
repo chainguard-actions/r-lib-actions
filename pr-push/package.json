@@ -1,0 +1,35 @@
+{
+  "name": "pr-push",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Push changes back to a Pull Request branch",
+  "main": "src/main.ts",
+  "scripts": {
+    "build": "ncc build --source-map --minify",
+    "format": "prettier --write **/*.ts",
+    "format-check": "prettier --check **/*.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/r-lib/actions.git",
+    "directory": "pr-fetch"
+  },
+  "keywords": [
+    "actions",
+    "git",
+    "r"
+  ],
+  "author": "YourNameOrOrganization",
+  "license": "MIT",
+  "dependencies": {
+    "@actions/core": "^2.0.3",
+    "@actions/exec": "^2.0.0",
+    "@actions/github": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.10",
+    "@vercel/ncc": "^0.38.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.5"
+  }
+}

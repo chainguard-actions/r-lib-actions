@@ -1,0 +1,26 @@
+name: Test RSPM environment variable is honored
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      SETUP_R_LINUX_PLATFORM: linux-ubuntu-22.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        env:
+          RSPM: https://example.com/cran/latest
+        with:
+          r-version: '4.4.2'
+          install-r: 'false'
+      - name: Assert RSPM exported and written to .Rprofile
+        run: |
+          cat "$HOME/.Rprofile"
+          echo "RSPM=$RSPM RENV_CONFIG_REPOS_OVERRIDE=$RENV_CONFIG_REPOS_OVERRIDE"
+          [ "$RSPM" = "https://example.com/cran/latest" ] || { echo "FAIL: RSPM"; exit 1; }
+          [ "$RENV_CONFIG_REPOS_OVERRIDE" = "https://example.com/cran/latest" ] || { echo "FAIL: RENV override"; exit 1; }
+          grep -q "RSPM = 'https://example.com/cran/latest'" "$HOME/.Rprofile" || { echo "FAIL: profile RSPM"; exit 1; }
+          grep -q 'c("RSPM")' "$HOME/.Rprofile" || { echo "FAIL: RSPM should be forced"; exit 1; }
+          echo "PASS"

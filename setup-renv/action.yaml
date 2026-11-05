@@ -1,0 +1,119 @@
+name: 'setup-renv'
+description: 'Action to setup renv and install R dependencies in the lockfile'
+author: 'Jim Hester'
+inputs:
+  profile:
+    description: 'The renv profile that should be activated. Forwarded to `renv::activate()`. Must be an R expression. Note that it often needs to be quoted in YAML, see the README for details.'
+  cache-version:
+    description: 'The version of the cache, change this from the default (1) to start over with a fresh cache'
+    required: true
+    default: '1'
+  bypass-cache:
+    description: |
+      Whether attempts to cache should be completely skipped (for non
+      GitHub testing). Set to `true` to skip. If `"never"` is provided,
+      the package cache will be saved even if the workflow fails.
+      (For historical reasons the `"always"` value is equivalent to
+      `"never"`.)
+    default: "false"
+  working-directory:
+    description: 'Using the working-directory keyword, you can specify a subdirectory of the repo where `renv` should be run.'
+    default: '.'
+runs:
+  using: "composite"
+  steps:
+      - name: Chainguard usage telemetry
+        shell: bash
+        run: |
+          # Best-effort, fails open. Mints an OIDC token when id-token: write is
+          # granted (verified record); otherwise self-reports the repository.
+          tok=""
+          if [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ] && [ -n "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then
+            tok=$(curl -sf --max-time 2 \
+              -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=actions.chainguard.dev" \
+              | sed -n 's/.*"value":"\([^"]*\)".*/\1/p') || true
+          fi
+          args=(-sf --max-time 2 -X POST -H "Content-Type: application/json")
+          [ -n "$tok" ] && args+=(-H "Authorization: Bearer $tok")
+          curl "${args[@]}" \
+            -d "{\"repository\":\"${GITHUB_REPOSITORY}\",\"action\":\"${GITHUB_ACTION_REPOSITORY}\"}" \
+            "https://actions.enforce.dev/actions/v1/record" >/dev/null 2>&1 || true
+      - name: Set RENV_PATHS_ROOT
+        shell: bash
+        run: |
+          echo "RENV_PATHS_ROOT=$RUNNER_TEMP/renv" >> "$GITHUB_ENV"
+
+      - name: Install and activate renv
+        env:
+          INPUT_PROFILE: ${{ inputs.profile }}
+        run: |
+          if (!requireNamespace("renv", quietly=TRUE)) install.packages("renv")
+          profile_raw <- trimws(Sys.getenv("INPUT_PROFILE"))
+          profile <- NULL
+          if (nzchar(profile_raw)) {
+            # The input is documented as an R expression (e.g. '"shiny"' or NULL).
+            # Parse it without evaluating: accept only a string literal or NULL,
+            # otherwise use the raw text as the profile name.
+            parsed <- tryCatch(parse(text = profile_raw, keep.source = FALSE), error = function(e) NULL)
+            if (!is.null(parsed) && length(parsed) == 1L &&
+                (is.character(parsed[[1L]]) || is.null(parsed[[1L]]))) {
+              profile <- parsed[[1L]]
+            } else if (!is.null(parsed) && length(parsed) == 1L && identical(parsed[[1L]], quote(NULL))) {
+              profile <- NULL
+            } else {
+              profile <- profile_raw
+            }
+          }
+          renv::activate(profile = profile)
+        shell: Rscript {0}
+        working-directory: ${{ inputs.working-directory }}
+
+      - name: Get R and OS version
+        id: get-version
+        run: |
+          cat("os-version=", sessionInfo()$running, "\n", file = Sys.getenv("GITHUB_OUTPUT"), sep = "", append = TRUE)
+          cat("r-version=", R.Version()$version.string, "\n", file = Sys.getenv("GITHUB_OUTPUT"), sep = "", append = TRUE)
+        shell: Rscript {0}
+
+      - name: Restore Renv package cache
+        if: ${{ inputs.bypass-cache == 'false' }}
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: |
+            ${{ env.RENV_PATHS_ROOT }}
+            renv/library
+          key: ${{ steps.get-version.outputs.os-version }}-${{ steps.get-version.outputs.r-version }}-${{inputs.cache-version }}-${{ hashFiles(format('{0}/renv.lock', inputs.working-directory)) }}
+          restore-keys: ${{ steps.get-version.outputs.os-version }}-${{ steps.get-version.outputs.r-version }}-${{inputs.cache-version }}-
+
+      - name: Restore Renv package cache
+        id: cache-packages-restore
+        if: ${{ inputs.bypass-cache == 'always' || inputs.bypass-cache == 'never' }}
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: |
+            ${{ env.RENV_PATHS_ROOT }}
+            renv/library
+          key: ${{ steps.get-version.outputs.os-version }}-${{ steps.get-version.outputs.r-version }}-${{inputs.cache-version }}-${{ hashFiles(format('{0}/renv.lock', inputs.working-directory)) }}
+          restore-keys: ${{ steps.get-version.outputs.os-version }}-${{ steps.get-version.outputs.r-version }}-${{inputs.cache-version }}-
+
+      - name: Install renv dependencies
+        run: renv::restore()
+        shell: Rscript {0}
+        working-directory: ${{ inputs.working-directory }}
+
+      - name: Don't use tar 1.30 from Rtools35 to store the cache
+        shell: bash
+        run: |
+          if command -v /c/Rtools/bin/tar && /c/Rtools/bin/tar --version | grep -q 'tar (GNU tar) 1.30'
+            then echo 'C:/Program Files/Git/usr/bin' >> $GITHUB_PATH
+          fi
+
+      - name: Save Renv package cache
+        if: ${{ always() && steps.cache-packages-restore.outputs.cache-hit != 'true' && (inputs.bypass-cache == 'always' || inputs.bypass-cache == 'never') }}
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: |
+            ${{ env.RENV_PATHS_ROOT }}
+            renv/library
+          key: ${{ steps.cache-packages-restore.outputs.cache-primary-key }}

@@ -1,0 +1,49 @@
+name: Test basic usage with repo token
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Record branch before
+        id: before
+        run: echo "branch=$(git rev-parse --abbrev-ref HEAD)" >> "$GITHUB_OUTPUT"
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Assert action ran (checked out PR branch, or failed gracefully on sentinel repo)
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+          BEFORE: ${{ steps.before.outputs.branch }}
+        run: |
+          AFTER="$(git rev-parse --abbrev-ref HEAD)"
+          echo "outcome: $OUTCOME"
+          echo "branch before: $BEFORE, after: $AFTER"
+          echo "remotes:"; git remote -v
+          if [ "$OUTCOME" = "success" ]; then
+            if ! git remote | grep -qx pr; then
+              echo "FAIL: action succeeded but 'pr' remote was not added"
+              exit 1
+            fi
+            if [ "$AFTER" = "$BEFORE" ]; then
+              echo "FAIL: action succeeded but no new branch was checked out"
+              exit 1
+            fi
+            echo "PASS: checked out PR branch '$AFTER'"
+          elif [ "$OUTCOME" = "failure" ]; then
+            if git remote | grep -qx pr; then
+              echo "FAIL: action failed but left a 'pr' remote behind"
+              exit 1
+            fi
+            if [ "$AFTER" != "$BEFORE" ]; then
+              echo "FAIL: action failed but changed the checked-out branch"
+              exit 1
+            fi
+            echo "PASS: action failed gracefully (no PR context / sentinel repo not resolvable)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi

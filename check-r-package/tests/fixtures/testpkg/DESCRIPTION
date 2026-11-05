@@ -1,0 +1,9 @@
+Package: testpkg
+Type: Package
+Title: A Minimal Test Package
+Version: 0.1.0
+Author: Test User
+Maintainer: Test User <test@example.com>
+Description: A minimal package used to test the check-r-package action.
+License: MIT + file LICENSE
+Encoding: UTF-8

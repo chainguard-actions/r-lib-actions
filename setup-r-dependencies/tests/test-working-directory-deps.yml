@@ -1,0 +1,36 @@
+name: Test deps from DESCRIPTION in working-directory with needs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install R if missing
+        run: |
+          if ! command -v Rscript >/dev/null 2>&1; then
+            if command -v sudo >/dev/null 2>&1; then SUDO=sudo; else SUDO=""; fi
+            export DEBIAN_FRONTEND=noninteractive
+            $SUDO apt-get update
+            $SUDO apt-get install -y --no-install-recommends r-base-core ca-certificates libcurl4-openssl-dev
+          fi
+          Rscript --version
+      - id: action
+        uses: .
+        with:
+          working-directory: tests/fixtures/rpkg
+          packages: deps::.
+          needs: website
+          cache: 'false'
+          install-pandoc: 'false'
+          install-quarto: 'false'
+      - name: Assert Imports and Config/Needs packages installed
+        run: |
+          Rscript -e 'for (p in c("glue", "praise")) { if (!requireNamespace(p, quietly = TRUE)) { cat("FAIL:", p, "not installed\n"); quit(status = 1) }; cat("PASS:", p, "installed\n") }'
+      - name: Assert lockfile cleaned up
+        run: |
+          if [ -f tests/fixtures/rpkg/.github/pkg.lock ]; then
+            echo "FAIL: lockfile not removed"
+            exit 1
+          fi
+          echo "PASS"

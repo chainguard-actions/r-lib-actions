@@ -1,0 +1,41 @@
+name: Test renv profile
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install R
+        run: |
+          if ! command -v Rscript >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends r-base-core
+          fi
+          RHOME="$(R RHOME)"
+          echo 'options(repos = c(CRAN = "https://cloud.r-project.org"))' | sudo tee -a "$RHOME/etc/Rprofile.site"
+          Rscript -e 'R.version.string'
+      - id: action
+        uses: .
+        with:
+          working-directory: tests/fixtures/renv-profile
+          profile: '"dev"'
+          bypass-cache: "true"
+      - name: Assert profile activated
+        run: |
+          DIR="$GITHUB_WORKSPACE/tests/fixtures/renv-profile"
+          ls -la "$DIR" "$DIR/renv" || true
+          if [ ! -f "$DIR/renv/activate.R" ]; then
+            echo "FAIL: renv/activate.R not created"
+            exit 1
+          fi
+          if [ ! -f "$DIR/renv/profile" ]; then
+            echo "FAIL: renv/profile file not created"
+            exit 1
+          fi
+          echo "profile file: $(cat "$DIR/renv/profile")"
+          if ! grep -q "dev" "$DIR/renv/profile"; then
+            echo "FAIL: expected profile 'dev'"
+            exit 1
+          fi
+          echo "PASS"

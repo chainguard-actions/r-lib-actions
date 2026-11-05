@@ -1,0 +1,9 @@
+Package: failpkg
+Type: Package
+Title: A Package With Failing Tests
+Version: 0.1.0
+Author: Test User
+Maintainer: Test User <test@example.com>
+Description: A minimal package whose tests fail, used to test error handling.
+License: MIT + file LICENSE
+Encoding: UTF-8

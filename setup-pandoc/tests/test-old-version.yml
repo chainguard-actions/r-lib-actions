@@ -1,0 +1,21 @@
+name: Test old pandoc version (legacy linux tarball naming)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        with:
+          pandoc-version: '2.7.3'
+      - name: Assert pandoc 2.7.3 is on PATH
+        run: |
+          ACTUAL="$(pandoc --version | head -n1)"
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" != "pandoc 2.7.3" ]; then
+            echo "FAIL: expected 'pandoc 2.7.3'"
+            exit 1
+          fi
+          echo "PASS"

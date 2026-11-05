@@ -1,0 +1,38 @@
+name: Test compiling a LaTeX document with TinyTeX
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Prepare apt (action runs sudo apt-get install texinfo)
+        run: |
+          if ! command -v sudo >/dev/null 2>&1; then
+            apt-get update && apt-get install -y sudo
+          fi
+          sudo apt-get update
+          command -v perl || sudo apt-get install -y perl
+          command -v wget || command -v curl || sudo apt-get install -y wget
+      - id: action
+        uses: .
+      - name: Compile a minimal document
+        run: |
+          mkdir -p "$RUNNER_TEMP/doc"
+          cd "$RUNNER_TEMP/doc"
+          cat > hello.tex <<'EOF'
+          \documentclass{article}
+          \begin{document}
+          Hello TinyTeX
+          \end{document}
+          EOF
+          pdflatex -interaction=nonstopmode hello.tex
+      - name: Assert PDF produced
+        run: |
+          f="$RUNNER_TEMP/doc/hello.pdf"
+          if [ ! -s "$f" ]; then
+            echo "FAIL: hello.pdf not produced"
+            exit 1
+          fi
+          head -c 5 "$f" | grep -q '%PDF-' || { echo "FAIL: not a PDF"; exit 1; }
+          echo "PASS"

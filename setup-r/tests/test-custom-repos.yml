@@ -1,0 +1,31 @@
+name: Test custom CRAN, extra repositories and user agent
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      SETUP_R_LINUX_PLATFORM: linux-ubuntu-22.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        with:
+          r-version: '4.4.2'
+          install-r: 'false'
+          use-public-rspm: 'false'
+          cran: https://cloud.r-project.org
+          http-user-agent: my-custom-agent
+          extra-repositories: |
+            https://repo1.r-universe.dev, https://repo2.r-universe.dev
+            https://repo3.r-universe.dev
+      - name: Assert .Rprofile content
+        run: |
+          P="$HOME/.Rprofile"
+          cat "$P"
+          grep -q "CRAN = 'https://cloud.r-project.org'" "$P" || { echo "FAIL: custom CRAN"; exit 1; }
+          grep -q '"https://repo1.r-universe.dev","https://repo2.r-universe.dev","https://repo3.r-universe.dev"' "$P" \
+            || { echo "FAIL: extra repositories"; exit 1; }
+          grep -q 'HTTPUserAgent = "my-custom-agent"' "$P" || { echo "FAIL: user agent"; exit 1; }
+          grep -q 'c("CRAN")' "$P" || { echo "FAIL: CRAN should be forced"; exit 1; }
+          echo "PASS"

@@ -1,0 +1,38 @@
+name: Test token provided outside of a pull request
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Record HEAD before
+        id: before
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          repo-token: ${{ github.token }}
+      - name: Assert action failed gracefully (no PR number / sentinel repo)
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          if [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action failed gracefully (no pull request to look up)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME' (no PR exists under workflow_dispatch)"
+            exit 1
+          fi
+      - name: Assert local repository untouched
+        env:
+          BEFORE: ${{ steps.before.outputs.sha }}
+        run: |
+          AFTER="$(git rev-parse HEAD)"
+          echo "before: $BEFORE after: $AFTER"
+          if [ "$BEFORE" != "$AFTER" ]; then
+            echo "FAIL: HEAD changed"
+            exit 1
+          fi
+          echo "PASS"

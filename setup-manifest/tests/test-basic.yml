@@ -1,0 +1,54 @@
+name: Test basic manifest setup
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Place manifest.json in workspace and on the Docker host path
+        run: |
+          set -e
+          cp "$GITHUB_WORKSPACE/tests/fixtures/manifest/manifest.json" "$GITHUB_WORKSPACE/manifest.json"
+          # The action runs `docker run -v $(pwd):/repo`, which is resolved by the
+          # Docker daemon on the HOST. Under act the job container's workspace is
+          # not at that path on the host, so seed manifest.json there via docker.
+          docker run --rm -i -v "$(pwd)":/repo ghcr.io/r-hub/r-minimal/r-minimal:latest \
+            sh -c 'rm -f /repo/renv.lock; cat > /repo/manifest.json' < "$GITHUB_WORKSPACE/tests/fixtures/manifest/manifest.json"
+          # The later setup-r / setup-renv steps read renv.lock from the job
+          # container workspace; provide the equivalent lockfile there (on a real
+          # runner the action overwrites it with the generated one).
+          cp "$GITHUB_WORKSPACE/tests/fixtures/manifest/renv.lock" "$GITHUB_WORKSPACE/renv.lock"
+      - id: action
+        uses: .
+      - name: Assert renv.lock was generated from manifest
+        run: |
+          LOCK="$(docker run --rm -v "$(pwd)":/repo ghcr.io/r-hub/r-minimal/r-minimal:latest cat /repo/renv.lock || true)"
+          echo "generated renv.lock:"
+          echo "$LOCK"
+          if [ -z "$LOCK" ]; then
+            echo "FAIL: renv.lock not generated"
+            exit 1
+          fi
+          if ! echo "$LOCK" | grep -q '"R6"'; then
+            echo "FAIL: renv.lock does not contain R6"
+            exit 1
+          fi
+          if ! echo "$LOCK" | grep -q '4.4.1'; then
+            echo "FAIL: renv.lock does not record R version 4.4.1"
+            exit 1
+          fi
+          echo "PASS: renv.lock generated"
+      - name: Assert R was installed
+        run: |
+          if ! command -v Rscript >/dev/null 2>&1; then
+            echo "FAIL: Rscript not found on PATH"
+            exit 1
+          fi
+          VERSION="$(Rscript -e 'cat(as.character(getRversion()))')"
+          echo "R version: $VERSION"
+          if [ -z "$VERSION" ]; then
+            echo "FAIL: could not determine R version"
+            exit 1
+          fi
+          echo "PASS: R installed"

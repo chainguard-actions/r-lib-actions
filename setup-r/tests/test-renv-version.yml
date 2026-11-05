@@ -1,0 +1,27 @@
+name: Test r-version renv from renv.lock
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      SETUP_R_LINUX_PLATFORM: linux-ubuntu-22.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        with:
+          r-version: renv
+          working-directory: tests/fixtures/renv
+          install-r: 'false'
+          use-public-rspm: 'false'
+      - name: Assert version read from renv.lock
+        env:
+          ACTUAL: ${{ steps.action.outputs.installed-r-version }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ "$ACTUAL" != "4.2.3" ]; then
+            echo "FAIL: expected '4.2.3'"
+            exit 1
+          fi
+          echo "PASS"

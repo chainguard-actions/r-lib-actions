@@ -1,0 +1,30 @@
+name: Test extra-packages
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install R if missing
+        run: |
+          if ! command -v Rscript >/dev/null 2>&1; then
+            if command -v sudo >/dev/null 2>&1; then SUDO=sudo; else SUDO=""; fi
+            export DEBIAN_FRONTEND=noninteractive
+            $SUDO apt-get update
+            $SUDO apt-get install -y --no-install-recommends r-base-core ca-certificates libcurl4-openssl-dev
+          fi
+          Rscript --version
+      - id: action
+        uses: .
+        with:
+          packages: any::R6
+          extra-packages: |
+            any::praise
+            any::crayon
+          cache: 'false'
+          install-pandoc: 'false'
+          install-quarto: 'false'
+      - name: Assert all packages installed
+        run: |
+          Rscript -e 'for (p in c("R6", "praise", "crayon")) { if (!requireNamespace(p, quietly = TRUE)) { cat("FAIL:", p, "not installed\n"); quit(status = 1) }; cat("PASS:", p, "installed\n") }'

@@ -1,0 +1,33 @@
+name: Test invalid R version fails
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      SETUP_R_LINUX_PLATFORM: linux-ubuntu-22.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          r-version: '99.99.99'
+          install-r: 'false'
+          use-public-rspm: 'false'
+      - name: Assert action failed and set no output
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+          ACTUAL: ${{ steps.action.outputs.installed-r-version }}
+        run: |
+          echo "outcome: $OUTCOME"
+          echo "output: $ACTUAL"
+          if [ "$OUTCOME" != "failure" ]; then
+            echo "FAIL: expected failure for a nonexistent R version"
+            exit 1
+          fi
+          if [ -n "$ACTUAL" ]; then
+            echo "FAIL: expected no installed-r-version output"
+            exit 1
+          fi
+          echo "PASS"
