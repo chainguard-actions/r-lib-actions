@@ -51,7 +51,7 @@ runs:
         shell: Rscript {0}
 
       - name: Restore Renv package cache
-        uses: actions/cache@8492260343ad570701412c2f464a5877dc76bace # v2
+        uses: chainguard-actions/actions-cache@2e184a2fe2479eba47a7df5ac029df0be769cc46 # v2
         with:
           path: ${{ env.RENV_PATHS_ROOT }}
           key: ${{ steps.get-version.outputs.os-version }}-${{ steps.get-version.outputs.r-version }}-${{inputs.cache-version }}-${{ hashFiles('renv.lock') }}
